@@ -5,3 +5,6 @@
 *.csv
 /etl
 quickstart.py
+
+#permitidos
+!requirements.txt
