@@ -8,7 +8,7 @@
 
 ## Workflow
 
-![ProjectWorkflow](./Assets/Project_workflow.jpg)
+![ProjectWorkflow](./Assets/project_workflow.jpg)
 
 ## Target
 
