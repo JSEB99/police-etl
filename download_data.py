@@ -70,6 +70,8 @@ def download_items_in_folder(items, service):
                 status, done = downloader.next_chunk()
                 print('Download progress {0}'.format(status.progress()*100))
 
+            file.seek(0)
+
             with open(os.path.join('./Silver', item['name']), 'wb') as download_file:
                 download_file.write(file.read())
                 download_file.close()
