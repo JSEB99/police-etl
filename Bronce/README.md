@@ -1,8 +1,8 @@
-# Data to upload to Google Drive
+# Data in Google Drive
 
 ## Estructura utilizada
 
-- 🗁 Data
+- 🗁 Bronce
   - 🗁 Abigeato
     - 🗎 Excel files
   - 🗁 Amenazas
