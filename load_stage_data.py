@@ -4,10 +4,10 @@ import pandas as pd
 from psycopg2.extras import execute_values
 
 # Datos de conexión a la base de datos
-db_host = "localhost"
-db_name = "Pruebas"
-db_user = "postgres"
-db_password = "123456789"
+db_host = "databasepolices.c1kgoa40yta2.us-east-2.rds.amazonaws.com"
+db_name = "databasepolices"
+db_user = "etlproyecto"
+db_password = "etl"
 # Puerto predeterminado de PostgreSQL
 db_port = "5432"
 # Nombre de la tabla donde se alojaran los datos de manera temporal
@@ -22,7 +22,7 @@ def create_table(conn, table_name):
     # Consulta para crear la tabla con el nombre especificado
     create_table_query = f'''
     CREATE TABLE {table_name} (
-        FECHA DATE,
+        FECHA TIMESTAMP,
         DEPARTAMENTO VARCHAR(20),
         MUNICIPIO VARCHAR(50),
         CODIGO_DANE INTEGER,
@@ -52,7 +52,7 @@ def create_table(conn, table_name):
 def load_data(conn, cur):
     try:
         # Ruta a la carpeta que contiene los archivos CSV
-        folder_path = 'C:\\Users\\Milton\\Documents\\Proyecto\\Silver'
+        folder_path = 'C:\\Users\\Milton\\Desktop\\POSGRADO\\Trabajo dirigido\\police-etl\\Silver'
 
         # Obtener la lista de archivos CSV en la carpeta
         csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
@@ -83,7 +83,7 @@ def load_data(conn, cur):
             # Verificar si la columna 'DELITO' existe en el DataFrame
             if 'DELITO' not in df.columns:
                 # Si la columna 'DELITO' no existe, agregar una columna con valores nulos
-                df['DELITO'] = None
+                df['DELITO'] = "NO REPORTADO"
 
             df = df[orden]
 
