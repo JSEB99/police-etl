@@ -6,12 +6,11 @@ from psycopg2.extras import execute_values
 from sqlalchemy import create_engine
 
 # Datos de conexión a la base de datos
-db_host = "localhost"
-db_name = "Pruebas"
-db_user = "postgres"
-db_password = "123456789"
-# Puerto predeterminado de PostgreSQL
-db_port = "5432"
+db_host = "databasepolices.c1kgoa40yta2.us-east-2.rds.amazonaws.com"
+db_name = "databasepolices"
+db_user = "etlproyecto"
+db_password = "etl"
+db_port = "5432"  # Puerto predeterminado de PostgreSQL
 
 
 def truncate_dimensions(conn):
@@ -47,6 +46,40 @@ def truncate_dimensions(conn):
         # Revertir la transacción en caso de error
         conn.rollback()
         print("Error al truncar las tablas:", e)
+
+
+def reset_sequences(conn):
+    try:
+        with conn.cursor() as cur:
+
+            # Lista de secuencias a reiniciar
+            secuencias = [
+                "WEAPONS_SEQ",
+                "CRIMES_SEQ",
+                "AGEGROUPS_SEQ",
+                "DEPARTMENTS_SEQ",
+                "TOWN_SEQ",
+                "FACT_SEQ",
+                "ARTICLE_SEQ",
+                "TIME_SEQ"
+            ]
+
+            # Comenzar una transacción
+            conn.autocommit = False
+
+            # Ejecutar el reinicio de cada secuencia
+            for secuencia in secuencias:
+                cur.execute(f"ALTER SEQUENCE ESQ_SEQ.{
+                            secuencia} RESTART WITH 1;")
+
+            # Confirmar la transacción
+            conn.commit()
+            print("Reinicio de secuencias con éxito.")
+
+    except psycopg2.Error as e:
+        # Revertir la transacción en caso de error
+        conn.rollback()
+        print("Error al reiniciar las secuencias:", e)
 
 
 def create_dimension_crimes(conn):
@@ -102,7 +135,7 @@ def create_dimension_age_groups(conn):
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
             # Consulta SQL para obtener los valores únicos de la columna agrupa_edad_persona
-            query = "SELECT DISTINCT AGRUPA_EDAD_PERSONA FROM OLTP.STAGE_DATA;"
+            query = "SELECT DISTINCT AGRUPA_EDAD_PERSONA FROM OLTP.STAGE_DATA ORDER BY AGRUPA_EDAD_PERSONA;"
 
             # Ejecutar la consulta
             cur.execute(query)
@@ -127,7 +160,7 @@ def create_dimension_departments(conn):
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
             # Consulta SQL para obtener los valores únicos de la columna departamento
-            query = "SELECT DISTINCT UPPER(DEPARTAMENTO) AS DEPARTAMENTO FROM OLTP.STAGE_DATA ORDER BY DEPARTAMENTO;"
+            query = "SELECT DISTINCT DEPARTAMENTO FROM OLTP.STAGE_DATA ORDER BY DEPARTAMENTO;"
 
             # Ejecutar la consulta
             cur.execute(query)
@@ -151,7 +184,7 @@ def create_dimension_towns(conn):
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
             # Consulta SQL para obtener los valores únicos de la columna municipio
-            query = "SELECT DISTINCT UPPER(MUNICIPIO) AS MUNICIPIO FROM OLTP.STAGE_DATA ORDER BY MUNICIPIO;"
+            query = "SELECT DISTINCT MUNICIPIO FROM OLTP.STAGE_DATA ORDER BY MUNICIPIO;"
 
             # Ejecutar la consulta
             cur.execute(query)
@@ -175,7 +208,7 @@ def create_dimension_articles(conn):
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
             # Consulta SQL para obtener los valores únicos de la columna DELITO
-            query = "SELECT DISTINCT DELITO FROM OLTP.STAGE_DATA WHERE DELITO IS NOT NULL;"
+            query = "SELECT DISTINCT DELITO FROM OLTP.STAGE_DATA WHERE DELITO IS NOT NULL ORDER BY DELITO;"
 
             # Ejecutar la consulta
             cur.execute(query)
@@ -263,7 +296,7 @@ def create_dimension_locations(conn):
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
             # Consulta SQL para obtener los valores únicos necesarios
-            query = """SELECT DISTINCT CODIGO_DANE, UPPER(DEPARTAMENTO) AS DEPARTAMENTO, UPPER(MUNICIPIO) AS MUNICIPIO 
+            query = """SELECT DISTINCT CODIGO_DANE, DEPARTAMENTO, MUNICIPIO
                         FROM OLTP.STAGE_DATA ORDER BY CODIGO_DANE, DEPARTAMENTO, MUNICIPIO;"""
             # Ejecutar la consulta
             cur.execute(query)
@@ -291,7 +324,49 @@ def create_dimension_locations(conn):
 
             # Confirmar los cambios
             conn.commit()
-        print("Dimensión 'LOCATIONS' creada exitosamente")
+        print("Dimensión 'Locations' creada exitosamente")
+    except psycopg2.Error as e:
+        print("Error al insertar datos en la base de datos:", e)
+
+
+def create_fact_table_historic(conn):
+    try:
+        with conn.cursor() as cur:
+            # Consulta SQL para la inserción de datos en OLTP.HISTORIC utilizando JOINs
+            insert_query = """
+                INSERT INTO OLTP.HISTORIC (DANE_ID, WEAPON_ID, AGEGROUP_ID, CRIME_ID, ARTICLE_ID, GENDER_TYPE, TIME_ID, QUANTITY)
+                SELECT
+                    sd.CODIGO_DANE,
+                    w.WEAPON_ID,
+                    a.AGEGROUP_ID,
+                    c.CRIME_ID,
+                    art.ARTICLE_ID,
+                    sd.GENERO,
+                    t.TIME_ID,
+                    sd.CANTIDAD
+                FROM
+                    OLTP.STAGE_DATA sd
+                JOIN
+                    OLTP.WEAPONS w ON sd.ARMAS_MEDIOS = w.W_DESCRIPTION
+                JOIN
+                    OLTP.AGEGROUPS a ON sd.AGRUPA_EDAD_PERSONA = a.AG_DESCRIPTION
+                JOIN
+                    OLTP.CRIMES c ON sd.CRIMEN = c.W_DESCRIPTION
+                JOIN
+                    OLTP.ARTICLE art ON sd.DELITO = art.ARTICLE_NAME
+                JOIN
+                    OLTP.TIME t ON t.DT_FECHA = sd.FECHA;
+            """
+
+            # Ejecutar la consulta para la inserción de datos
+            cur.execute(insert_query)
+
+            # Confirmar los cambios
+            conn.commit()
+
+            # Imprimir mensaje de éxito
+            print("Fact Table 'Historic' creada exitosamente")
+
     except psycopg2.Error as e:
         print("Error al insertar datos en la base de datos:", e)
 
@@ -307,6 +382,7 @@ try:
     ) as conn:
         print("Conexión exitosa")
         truncate_dimensions(conn)
+        reset_sequences(conn)
         create_dimension_crimes(conn)
         create_dimension_weapons(conn)
         create_dimension_age_groups(conn)
@@ -315,6 +391,6 @@ try:
         create_dimension_articles(conn)
         create_dimension_time(conn)
         create_dimension_locations(conn)
-        # create_fact_table(conn)
+        create_fact_table_historic(conn)
 except psycopg2.Error as e:
     print("Error al conectar a la base de datos:", e)
