@@ -85,12 +85,14 @@ def main():
     # ID de la carpeta de Google Drive de la que deseas descargar los archivos
     folder_id = '1o4uGVdzJwM5VmobCji6V59IzsfLdw5Ah'
     # Autenticar y obtener el servicio de Google Drive
-    service = authenticate_drive(READ_SCOPE, 'token_read')
+    print("Autenticando lectura...")
+    service = authenticate_drive(READ_SCOPE, 'token_lectura')
+    print("Lectura autenticada")
 
     if service:
 
         items = list_files_in_folder(service, folder_id)
-        service_download = authenticate_drive(SCOPES, 'token_download')
+        service_download = authenticate_drive(SCOPES, 'token_descarga')
 
         if service_download:
             download_items_in_folder(items, service_download)
