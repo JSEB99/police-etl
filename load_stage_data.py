@@ -25,6 +25,7 @@ def create_table(conn, table_name):
         FECHA TIMESTAMP,
         DEPARTAMENTO VARCHAR(20),
         MUNICIPIO VARCHAR(50),
+        CAPITAL INTEGER,
         CODIGO_DANE INTEGER,
         AGRUPA_EDAD_PERSONA VARCHAR(50),
         GENERO VARCHAR(50),
@@ -69,8 +70,9 @@ def load_data(conn, cur):
             file_name_column = os.path.splitext(
                 os.path.basename(file_path))[0].upper().replace("_", " ")
 
-            orden = ['FECHA', 'DEPARTAMENTO', 'MUNICIPIO', 'CODIGO_DANE',
-                     'AGRUPA_EDAD_PERSONA', 'GENERO', 'ARMAS_MEDIOS', 'CANTIDAD', 'DELITO']
+            orden = ['FECHA', 'DEPARTAMENTO', 'MUNICIPIO', 'CAPITAL', 'CODIGO_DANE', 'AGRUPA_EDAD_PERSONA',
+                     'GENERO', 'ARMAS_MEDIOS', 'CANTIDAD', 'DELITO']
+
             # Cargar el archivo CSV en un DataFrame de pandas
             try:
                 # Leer el archivo CSV en un DataFrame y ordenarlo según los criterios de OLPT.STAGE_DATA
@@ -94,7 +96,7 @@ def load_data(conn, cur):
             data = df.values.tolist()
 
             # Tamaño del lote para la inserción masiva
-            batch_size = 1000  # Puedes ajustar este valor según las pruebas de rendimiento
+            batch_size = 10000  # Puedes ajustar este valor según las pruebas de rendimiento
 
             # Total de filas en el DataFrame
             total_rows = len(data)
