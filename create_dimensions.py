@@ -10,7 +10,8 @@ db_host = "databasepolices.c1kgoa40yta2.us-east-2.rds.amazonaws.com"
 db_name = "databasepolices"
 db_user = "etlproyecto"
 db_password = "etl"
-db_port = "5432"  # Puerto predeterminado de PostgreSQL
+# Puerto predeterminado de PostgreSQL
+db_port = "5432"
 
 
 def truncate_dimensions(conn):
@@ -25,8 +26,8 @@ def truncate_dimensions(conn):
                 "towns",
                 "agegroups",
                 "crimes",
-                "article",
-                "time",
+                "articles",
+                "times",
                 "weapons"
             ]
 
@@ -183,8 +184,8 @@ def create_dimension_towns(conn):
     try:
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
-            # Consulta SQL para obtener los valores únicos de la columna municipio
-            query = "SELECT DISTINCT MUNICIPIO FROM OLTP.STAGE_DATA ORDER BY MUNICIPIO;"
+            # Consulta SQL para obtener los valores únicos de la columna municipio y capital
+            query = "SELECT DISTINCT MUNICIPIO, CAPITAL FROM OLTP.STAGE_DATA ORDER BY MUNICIPIO;"
 
             # Ejecutar la consulta
             cur.execute(query)
@@ -192,9 +193,11 @@ def create_dimension_towns(conn):
             # Iterar sobre los resultados e insertarlos en la tabla OLTP.Towns
             for row in cur.fetchall():
                 town_name = row[0]  # El valor único de municipio
+                town_flag = row[1]  # El valor de la columna capital
+
                 # Insertar el valor en la tabla OLTP.Towns
-                insert_query = "INSERT INTO OLTP.Towns (Town_name) VALUES (%s);"
-                cur.execute(insert_query, (town_name,))
+                insert_query = "INSERT INTO OLTP.Towns (Town_name, Town_flag) VALUES (%s, %s);"
+                cur.execute(insert_query, (town_name, town_flag))
 
             # Confirmar los cambios
             conn.commit()
@@ -217,7 +220,7 @@ def create_dimension_articles(conn):
             for row in cur.fetchall():
                 article_name = row[0]  # El valor único de DELITO
                 # Insertar el valor en la tabla OLTP.ARTICLE
-                insert_query = "INSERT INTO OLTP.ARTICLE (ARTICLE_NAME) VALUES (%s);"
+                insert_query = "INSERT INTO OLTP.Articles (ARTICLE_NAME) VALUES (%s);"
                 cur.execute(insert_query, (article_name,))
 
             # Confirmar los cambios
@@ -225,6 +228,15 @@ def create_dimension_articles(conn):
         print("Dimensión 'Article' creada exitosamente")
     except psycopg2.Error as e:
         print("Error al insertar datos en la base de datos:", e)
+
+
+# Función para obtener el nombre del mes en español
+def obtener_mes_en_espanol(mes):
+    meses = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ]
+    return meses[mes - 1]
 
 
 def generar_datos_fecha(fecha):
@@ -238,7 +250,7 @@ def generar_datos_fecha(fecha):
     else:
         str_semestre = "Segundo"
 
-    str_mes = fecha.strftime("%B")
+    str_mes = obtener_mes_en_espanol(num_mes)
     num_periodo = (num_mes - 1) // 3 + 1
 
     return (
@@ -255,7 +267,7 @@ def generar_datos_fecha(fecha):
 
 def insertar_datos_masivos(cursor, datos):
     query = """
-    INSERT INTO OLTP.TIME (
+    INSERT INTO OLTP.TIMES (
         DT_FECHA, NUM_ANIO, STR_SEMESTRE, NUM_PERIODO, STR_MES, NUM_MES, NUM_DIA, NUM_SEMANA_MES
     ) VALUES %s
     """
@@ -353,9 +365,9 @@ def create_fact_table_historic(conn):
                 JOIN
                     OLTP.CRIMES c ON sd.CRIMEN = c.W_DESCRIPTION
                 JOIN
-                    OLTP.ARTICLE art ON sd.DELITO = art.ARTICLE_NAME
+                    OLTP.ARTICLES art ON sd.DELITO = art.ARTICLE_NAME
                 JOIN
-                    OLTP.TIME t ON t.DT_FECHA = sd.FECHA;
+                    OLTP.TIMES t ON t.DT_FECHA = sd.FECHA;
             """
 
             # Ejecutar la consulta para la inserción de datos
@@ -369,6 +381,34 @@ def create_fact_table_historic(conn):
 
     except psycopg2.Error as e:
         print("Error al insertar datos en la base de datos:", e)
+
+
+def update_dimension_departments(conn):
+    try:
+
+        csv_file_path = 'C:\\Users\\Milton\\Desktop\\POSGRADO\\Trabajo dirigido\\police-etl\\departamentos.csv'
+
+        # Leer el archivo CSV en un DataFrame de pandas
+        df = pd.read_csv(csv_file_path)
+
+        # Cursor para ejecutar consultas
+        with conn.cursor() as cur:
+            # Iterar sobre cada fila del DataFrame
+            for index, row in df.iterrows():
+                department_name = row['DEPARTAMENTO']
+                latitude = row['LATITUD']
+                longitude = row['LONGITUD']
+
+                # Actualizar la latitud y longitud del departamento en la tabla OLTP.Departments
+                update_query = "UPDATE OLTP.Departments SET Latitude = %s, Longitude = %s WHERE Department_name = %s;"
+                cur.execute(update_query, (latitude,
+                            longitude, department_name))
+
+            # Confirmar los cambios
+            conn.commit()
+        print("Dimension 'Departments' actualizada exitosamente")
+    except (psycopg2.Error, IOError) as e:
+        print("Error al actualizar datos en la base de datos:", e)
 
 
 try:
@@ -386,10 +426,11 @@ try:
         create_dimension_crimes(conn)
         create_dimension_weapons(conn)
         create_dimension_age_groups(conn)
-        create_dimension_departments(conn)
-        create_dimension_towns(conn)
         create_dimension_articles(conn)
         create_dimension_time(conn)
+        create_dimension_departments(conn)
+        update_dimension_departments(conn)
+        create_dimension_towns(conn)
         create_dimension_locations(conn)
         create_fact_table_historic(conn)
 except psycopg2.Error as e:
