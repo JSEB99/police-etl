@@ -28,7 +28,8 @@ def truncate_dimensions(conn):
                 "crimes",
                 "articles",
                 "times",
-                "weapons"
+                "weapons",
+                "genders"
             ]
 
             # Comenzar una transacción
@@ -62,7 +63,8 @@ def reset_sequences(conn):
                 "TOWN_SEQ",
                 "FACT_SEQ",
                 "ARTICLE_SEQ",
-                "TIME_SEQ"
+                "TIME_SEQ",
+                "GENDERS_SEQ"
             ]
 
             # Comenzar una transacción
@@ -346,14 +348,14 @@ def create_fact_table_historic(conn):
         with conn.cursor() as cur:
             # Consulta SQL para la inserción de datos en OLTP.HISTORIC utilizando JOINs
             insert_query = """
-                INSERT INTO OLTP.HISTORIC (DANE_ID, WEAPON_ID, AGEGROUP_ID, CRIME_ID, ARTICLE_ID, GENDER_TYPE, TIME_ID, QUANTITY)
+                INSERT INTO OLTP.HISTORIC (DANE_ID, WEAPON_ID, AGEGROUP_ID, CRIME_ID, ARTICLE_ID, GENDER_ID, TIME_ID, QUANTITY)
                 SELECT
                     sd.CODIGO_DANE,
                     w.WEAPON_ID,
                     a.AGEGROUP_ID,
                     c.CRIME_ID,
                     art.ARTICLE_ID,
-                    sd.GENERO,
+                    g.GENDER_ID,
                     t.TIME_ID,
                     sd.CANTIDAD
                 FROM
@@ -367,7 +369,9 @@ def create_fact_table_historic(conn):
                 JOIN
                     OLTP.ARTICLES art ON sd.DELITO = art.ARTICLE_NAME
                 JOIN
-                    OLTP.TIMES t ON t.DT_FECHA = sd.FECHA;
+                    OLTP.TIMES t ON t.DT_FECHA = sd.FECHA
+                JOIN
+					OLTP.GENDERS g ON sd.GENERO = g.GENDER;
             """
 
             # Ejecutar la consulta para la inserción de datos
@@ -389,7 +393,7 @@ def update_dimension_departments(conn):
         csv_file_path = 'C:\\Users\\Milton\\Desktop\\POSGRADO\\Trabajo dirigido\\police-etl\\departamentos.csv'
 
         # Leer el archivo CSV en un DataFrame de pandas
-        df = pd.read_csv(csv_file_path)
+        df = pd.read_csv(csv_file_path, sep=',', encoding='UTF-8', header=0)
 
         # Cursor para ejecutar consultas
         with conn.cursor() as cur:
@@ -411,6 +415,61 @@ def update_dimension_departments(conn):
         print("Error al actualizar datos en la base de datos:", e)
 
 
+def update_dimension_towns(conn):
+    try:
+        csv_file_path = 'C:\\Users\\Milton\\Desktop\\POSGRADO\\Trabajo dirigido\\police-etl\\municipios.csv'
+
+        # Leer el archivo CSV en un DataFrame de pandas
+        df = pd.read_csv(csv_file_path, sep=',', encoding='UTF-8', header=0)
+
+        # Cursor para ejecutar consultas
+        with conn.cursor() as cur:
+            # Iterar sobre cada fila del DataFrame
+            for index, row in df.iterrows():
+                town_name = row['CIUDAD']
+                latitude = row['LATITUD']
+                longitude = row['LONGITUD']
+
+                # Actualizar la latitud y longitud de la ciudad en la tabla OLTP.TOWNS
+                update_query = """
+                UPDATE OLTP.TOWNS
+                SET LATITUDE = %s, LONGITUDE = %s
+                WHERE TOWN_NAME = %s AND TOWN_FLAG = 1;
+                """
+                cur.execute(update_query, (latitude, longitude, town_name))
+
+            # Confirmar los cambios
+            conn.commit()
+        print("Dimensión 'Towns' actualizada exitosamente")
+    except (psycopg2.Error, IOError) as e:
+        print("Error al actualizar datos en la base de datos:", e)
+
+
+def create_dimension_gender(conn):
+    try:
+        # Cursor para ejecutar consultas
+        with conn.cursor() as cur:
+            # Consulta SQL para obtener los valores únicos de la columna genero
+            query = "SELECT DISTINCT GENERO FROM OLTP.STAGE_DATA ORDER BY GENERO;"
+
+            # Ejecutar la consulta
+            cur.execute(query)
+
+            # Iterar sobre los resultados y insertarlos en la tabla OLTP.GENDER
+            for row in cur.fetchall():
+                gender_description = row[0]  # El valor único de genero
+                # Insertar el valor en la tabla OLTP.GENDER
+                insert_query = "INSERT INTO OLTP.GENDERS (GENDER) VALUES (%s);"
+                cur.execute(insert_query, (gender_description,))
+
+            # Confirmar los cambios
+            conn.commit()
+
+        print("Dimensión 'Genders' creada exitosamente")
+    except psycopg2.Error as e:
+        print("Error al insertar datos en la base de datos:", e)
+
+
 try:
     # Estableciendo la conexión
     with psycopg2.connect(
@@ -428,9 +487,11 @@ try:
         create_dimension_age_groups(conn)
         create_dimension_articles(conn)
         create_dimension_time(conn)
+        create_dimension_gender(conn)
         create_dimension_departments(conn)
         update_dimension_departments(conn)
         create_dimension_towns(conn)
+        update_dimension_towns(conn)
         create_dimension_locations(conn)
         create_fact_table_historic(conn)
 except psycopg2.Error as e:
